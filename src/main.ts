@@ -261,6 +261,9 @@ const library = await Library.open();
 const libraryList = $<HTMLUListElement>("library-list");
 if (!supportsFsAccess) $("library-note").hidden = false;
 
+// entry.id -> サムネ dataURL。再描画での再デコードを避けるためのキャッシュ。
+const thumbnailCache = new Map<number, string>();
+
 const THUMB_WIDTH = 320;
 // この平均輝度（0-255）を下回るフレームは「黒つぶれ」とみなし次の候補を試す
 const THUMB_MIN_BRIGHTNESS = 16;
@@ -339,6 +342,7 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
   removeButton.textContent = "×";
   removeButton.title = "ライブラリから削除";
   removeButton.addEventListener("click", () => {
+    thumbnailCache.delete(entry.id);
     void library.remove(entry.id).then(renderLibrary);
   });
   thumb.append(removeButton);
@@ -359,12 +363,20 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
 
   li.append(thumb, name, actions);
 
-  // サムネは権限プロンプトを出さずに取れる場合だけ生成し、後から差し込む
-  void library.getFileIfReady(entry).then(async (file) => {
-    if (!file) return;
-    const dataUrl = await createThumbnail(file);
-    if (dataUrl) thumb.style.backgroundImage = `url(${dataUrl})`;
-  });
+  const cached = thumbnailCache.get(entry.id);
+  if (cached) {
+    thumb.style.backgroundImage = `url(${cached})`;
+  } else {
+    // サムネは権限プロンプトを出さずに取れる場合だけ生成し、後から差し込む。
+    // 生成結果は entry.id でキャッシュし、再描画での再デコードを避ける。
+    void library.getFileIfReady(entry).then(async (file) => {
+      if (!file) return;
+      const dataUrl = await createThumbnail(file);
+      if (!dataUrl) return;
+      thumbnailCache.set(entry.id, dataUrl);
+      thumb.style.backgroundImage = `url(${dataUrl})`;
+    });
+  }
 
   return li;
 }
@@ -384,6 +396,7 @@ async function renderLibrary(): Promise<void> {
 }
 
 async function addToLibrary(sources: FileSource[]): Promise<void> {
+  if (sources.length === 0) return; // 選択キャンセル時など、無駄な再描画を避ける
   for (const source of sources) await library.add(source);
   await renderLibrary();
 }
@@ -396,6 +409,7 @@ $("btn-add-folder").addEventListener("click", () => {
 });
 $("btn-clear-library").addEventListener("click", () => {
   if (!confirm("ライブラリを全て削除しますか？")) return;
+  thumbnailCache.clear();
   void library.clear().then(renderLibrary);
 });
 
