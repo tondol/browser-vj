@@ -128,6 +128,28 @@ const names = await page.evaluate(() => [...document.querySelectorAll("#library-
 check("'._' metadata file ignored", !names.some((n) => n.includes("._meta")), names.join(","));
 check("normal files added", names.length === 2, `count=${names.length}`);
 
+// タイルのサムネが生成され、background-image が入る
+await sleep(800);
+const thumbsReady = await page.evaluate(() =>
+  [...document.querySelectorAll("#library-list .entry-thumb")].filter(
+    (el) => el.style.backgroundImage.startsWith("url("),
+  ).length,
+);
+check("thumbnails generated", thumbsReady === 2, `${thumbsReady}/2`);
+
+// タイルの →B でデッキ B にロードできる
+await page.evaluate(() => {
+  const tiles = [...document.querySelectorAll("#library-list .entry-tile")];
+  const buttons = tiles[0].querySelectorAll(".entry-actions button");
+  buttons[buttons.length - 1].click(); // → B
+});
+await sleep(900);
+const deckB = await page.evaluate(() => {
+  const v = document.getElementById("video-b");
+  return { name: document.getElementById("name-b").textContent, playing: !v.paused };
+});
+check("library tile loads deck B", deckB.name === "clip1.mp4" && deckB.playing, deckB.name);
+
 await page.click("#btn-clear-library"); // キャンセル
 await sleep(300);
 check("clear cancel keeps library", (await page.evaluate(() => document.querySelectorAll("#library-list li").length)) === 2);

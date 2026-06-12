@@ -261,25 +261,111 @@ const library = await Library.open();
 const libraryList = $<HTMLUListElement>("library-list");
 if (!supportsFsAccess) $("library-note").hidden = false;
 
-function entryRow(entry: LibraryEntry): HTMLLIElement {
-  const li = document.createElement("li");
-  const name = document.createElement("span");
-  name.className = "entry-name";
-  name.textContent = entry.name + (entry.persisted ? "" : "（保存なし）");
-  li.append(name);
-  for (const deck of decks) {
-    const button = document.createElement("button");
-    button.textContent = `→ ${deck.id.toUpperCase()}`;
-    button.addEventListener("click", () => void loadFromLibrary(entry, deck));
-    li.append(button);
+const THUMB_WIDTH = 320;
+// この平均輝度（0-255）を下回るフレームは「黒つぶれ」とみなし次の候補を試す
+const THUMB_MIN_BRIGHTNESS = 16;
+// 動画長に対する候補位置（先頭はフェードイン等で暗いことが多いので避ける）
+const THUMB_SEEK_RATIOS = [0.1, 0.3];
+
+// File から動画の1フレームを抜いてサムネイルの dataURL を作る。
+// 冒頭は黒みがちなので、複数候補位置を順に試し、黒つぶれなら次を採る。失敗時は null。
+async function createThumbnail(file: File): Promise<string | null> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.preload = "auto";
+  video.src = url;
+
+  const cleanup = () => {
+    URL.revokeObjectURL(url);
+    video.removeAttribute("src");
+    video.load();
+  };
+
+  try {
+    await once(video, "loadeddata");
+    const duration = video.duration || 0;
+    const ratio = video.videoHeight / video.videoWidth || 0.5625;
+    const canvas = document.createElement("canvas");
+    canvas.width = THUMB_WIDTH;
+    canvas.height = Math.round(THUMB_WIDTH * ratio);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    let lastDataUrl: string | null = null;
+    for (const seekRatio of THUMB_SEEK_RATIOS) {
+      video.currentTime = duration * seekRatio;
+      await once(video, "seeked");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      lastDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      if (averageBrightness(ctx, canvas) >= THUMB_MIN_BRIGHTNESS) break;
+    }
+    return lastDataUrl;
+  } catch {
+    return null;
+  } finally {
+    cleanup();
   }
+}
+
+function once(target: HTMLVideoElement, type: "loadeddata" | "seeked"): Promise<void> {
+  return new Promise((resolve, reject) => {
+    target.addEventListener(type, () => resolve(), { once: true });
+    target.addEventListener("error", () => reject(new Error("video error")), { once: true });
+  });
+}
+
+function averageBrightness(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): number {
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let sum = 0;
+  // 16px ごとに間引いてサンプリング（RGB の単純平均で十分）
+  const stride = 16 * 4;
+  let count = 0;
+  for (let i = 0; i < data.length; i += stride) {
+    sum += (data[i]! + data[i + 1]! + data[i + 2]!) / 3;
+    count++;
+  }
+  return count ? sum / count : 0;
+}
+
+function entryTile(entry: LibraryEntry): HTMLLIElement {
+  const li = document.createElement("li");
+  li.className = "entry-tile";
+
+  const thumb = document.createElement("div");
+  thumb.className = "entry-thumb";
   const removeButton = document.createElement("button");
+  removeButton.className = "entry-remove";
   removeButton.textContent = "×";
   removeButton.title = "ライブラリから削除";
   removeButton.addEventListener("click", () => {
     void library.remove(entry.id).then(renderLibrary);
   });
-  li.append(removeButton);
+  thumb.append(removeButton);
+
+  const name = document.createElement("span");
+  name.className = "entry-name";
+  name.textContent = entry.name + (entry.persisted ? "" : "（保存なし）");
+  name.title = entry.name;
+
+  const actions = document.createElement("div");
+  actions.className = "entry-actions";
+  for (const deck of decks) {
+    const button = document.createElement("button");
+    button.textContent = `→ ${deck.id.toUpperCase()}`;
+    button.addEventListener("click", () => void loadFromLibrary(entry, deck));
+    actions.append(button);
+  }
+
+  li.append(thumb, name, actions);
+
+  // サムネは権限プロンプトを出さずに取れる場合だけ生成し、後から差し込む
+  void library.getFileIfReady(entry).then(async (file) => {
+    if (!file) return;
+    const dataUrl = await createThumbnail(file);
+    if (dataUrl) thumb.style.backgroundImage = `url(${dataUrl})`;
+  });
+
   return li;
 }
 
@@ -294,7 +380,7 @@ async function loadFromLibrary(entry: LibraryEntry, deck: Deck): Promise<void> {
 
 async function renderLibrary(): Promise<void> {
   const entries = await library.list();
-  libraryList.replaceChildren(...entries.map(entryRow));
+  libraryList.replaceChildren(...entries.map(entryTile));
 }
 
 async function addToLibrary(sources: FileSource[]): Promise<void> {

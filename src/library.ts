@@ -101,4 +101,18 @@ export class Library {
       return null;
     }
   }
+
+  // 権限プロンプトを出さずに取得できる File だけ返す（サムネ生成用）。
+  // 未許可のハンドルは null（呼び出し側はプレースホルダにフォールバックする）。
+  async getFileIfReady(entry: LibraryEntry): Promise<File | null> {
+    if (entry.source instanceof File) return entry.source;
+    const handle = entry.source;
+    try {
+      const permission = await handle.queryPermission?.({ mode: "read" });
+      if (permission !== "granted") return null;
+      return await handle.getFile();
+    } catch {
+      return null;
+    }
+  }
 }

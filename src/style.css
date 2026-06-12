@@ -160,26 +160,55 @@ button:disabled {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.entry-tile {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-#library-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: #26262f;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 13px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
-#library-list .entry-name {
-  flex: 1;
+.entry-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background-color: #15151b;
+  background-size: cover;
+  background-position: center;
+  border-radius: 4px;
+}
+
+.entry-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.entry-tile .entry-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.entry-actions button {
+  flex: 1;
 }
 
 footer {
