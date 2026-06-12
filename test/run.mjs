@@ -43,10 +43,13 @@ function runNode(scriptPath) {
   });
 }
 
-const server = spawn("npm", ["run", "dev", "--", "--port", String(PORT)], {
-  cwd: join(testDir, ".."),
-  stdio: "ignore",
-});
+// --strictPort: ポートが埋まっていたら別ポートに逃げず失敗させる
+// （古いサーバを誤ってテストするのを防ぐ）
+const server = spawn(
+  "npm",
+  ["run", "dev", "--", "--port", String(PORT), "--strictPort"],
+  { cwd: join(testDir, ".."), stdio: "ignore" },
+);
 
 let exitCode = 0;
 try {

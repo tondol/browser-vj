@@ -73,9 +73,40 @@ document.addEventListener("keydown", (event) => {
   } satisfies VjMessage);
 });
 
+// Fullscreen API は専用 Space を作り、別ウィンドウのファイルダイアログ等で
+// Space が切り替わると裏に隠れて描画が止まる（ADR-0009）。代わりに、ウィンドウ
+// 自体を表示中のディスプレイいっぱいに広げてフルスクリーン相当の見た目にする。
+let maximized = false;
+let restoreRect: { x: number; y: number; w: number; h: number } | null = null;
+
+function maximizeWindow(): void {
+  restoreRect = {
+    x: window.screenX,
+    y: window.screenY,
+    w: window.outerWidth,
+    h: window.outerHeight,
+  };
+  // ウィンドウがいるディスプレイの作業領域に合わせる（マルチモニタ対応）
+  const left = window.screen.availLeft ?? 0;
+  const top = window.screen.availTop ?? 0;
+  window.moveTo(left, top);
+  window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+  document.body.classList.add("maximized");
+  maximized = true;
+}
+
+function restoreWindow(): void {
+  if (restoreRect) {
+    window.moveTo(restoreRect.x, restoreRect.y);
+    window.resizeTo(restoreRect.w, restoreRect.h);
+  }
+  document.body.classList.remove("maximized");
+  maximized = false;
+}
+
 document.addEventListener("dblclick", () => {
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void document.documentElement.requestFullscreen();
+  if (maximized) restoreWindow();
+  else maximizeWindow();
 });
 
 setTimeout(() => {

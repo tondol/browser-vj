@@ -35,13 +35,16 @@
         pointer-events: none;
         transition: opacity 1s;
       }
+      body.maximized {
+        cursor: none;
+      }
     </style>
   </head>
   <body>
     <div class="stage">
       <video id="video-a" muted playsinline loop></video>
       <video id="video-b" muted playsinline loop></video>
-      <span class="hint" id="hint">ダブルクリックでフルスクリーン</span>
+      <span class="hint" id="hint">ダブルクリックで最大化</span>
     </div>
     <script type="module" src="/src/output.ts"></script>
   </body>

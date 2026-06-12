@@ -208,58 +208,42 @@ function pickWithInput(setup: (input: HTMLInputElement) => void): Promise<File[]
   });
 }
 
-async function pickVideoFiles(multiple: boolean): Promise<FileSource[]> {
-  if (window.showOpenFilePicker) {
-    try {
-      return await window.showOpenFilePicker({
-        multiple,
-        types: [{ description: "動画", accept: { "video/mp4": [".mp4"] } }],
-      });
-    } catch {
-      return [];
-    }
-  }
+// ファイル選択は常に <input> 経由にする。File System Access API
+// （showOpenFilePicker 等）は呼び出し時に同一オリジンの別ウィンドウの
+// フルスクリーンを解除してしまうため、出力ウィンドウ運用と相性が悪い。
+function pickVideoFiles(multiple: boolean): Promise<File[]> {
   return pickWithInput((input) => {
     input.accept = "video/mp4";
     input.multiple = multiple;
   });
 }
 
-async function pickFolderVideos(): Promise<FileSource[]> {
-  if (window.showDirectoryPicker) {
-    try {
-      const dir = await window.showDirectoryPicker();
-      const handles: FileSystemFileHandle[] = [];
-      for await (const entry of dir.values()) {
-        if (entry.kind === "file" && isMp4(entry.name)) handles.push(entry);
-      }
-      return handles.sort((x, y) => x.name.localeCompare(y.name));
-    } catch {
-      return [];
-    }
-  }
+function pickFolderVideos(): Promise<File[]> {
   return pickWithInput((input) => {
     input.webkitdirectory = true;
   });
-}
-
-async function sourceToFile(source: FileSource): Promise<File> {
-  return source instanceof File ? source : source.getFile();
 }
 
 $("btn-load-a").addEventListener("click", () => void loadFromPicker(deckA));
 $("btn-load-b").addEventListener("click", () => void loadFromPicker(deckB));
 
 async function loadFromPicker(deck: Deck): Promise<void> {
-  const [source] = await pickVideoFiles(false);
-  if (source) loadFile(deck, await sourceToFile(source));
+  const [file] = await pickVideoFiles(false);
+  if (file) loadFile(deck, file);
 }
 
 // --- ライブラリ ---
 
 const library = await Library.open();
 const libraryList = $<HTMLUListElement>("library-list");
-if (!supportsFsAccess) $("library-note").hidden = false;
+
+// ボタン（<input>）追加は常にセッション内のみ。永続化はドラッグ＆ドロップ経由で、
+// かつ File System Access API 対応ブラウザのときだけ可能。
+const libraryNote = $("library-note");
+libraryNote.textContent = supportsFsAccess
+  ? "ボタンで追加した動画はこのセッション中のみ有効です。再起動後も残すにはドラッグ＆ドロップで追加してください。"
+  : "このブラウザではライブラリは保存されません（このセッション中のみ有効）。";
+libraryNote.hidden = false;
 
 // entry.id -> サムネ dataURL。再描画での再デコードを避けるためのキャッシュ。
 const thumbnailCache = new Map<number, string>();
