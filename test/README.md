@@ -24,7 +24,6 @@ node test/run.mjs smoke  # 特定テストだけ実行
 - [run.mjs](run.mjs) — dev サーバの起動・待機・テスト実行・後始末を行うランナー
 - [helpers.mjs](helpers.mjs) — ブラウザ起動・動画生成・drop 合成・assert などの共通処理
 - [smoke.mjs](smoke.mjs) — コア機能（ロード・出力ミラー・フェーダー・ナッジ・ループ・ライブラリ・DnD）
-- [resilience.mjs](resilience.mjs) — バックグラウンド凍結耐性（ADR-0005 の検証）
 
 ## 環境変数
 

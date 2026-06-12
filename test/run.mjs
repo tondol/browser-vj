@@ -13,7 +13,7 @@ const PORT = 5173;
 const URL = `http://localhost:${PORT}`;
 
 const only = process.argv.slice(2);
-const allTests = ["smoke", "resilience"];
+const allTests = ["smoke"];
 const tests = only.length ? only : allTests;
 
 function waitForServer(url, timeoutMs = 30000) {

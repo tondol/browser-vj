@@ -14,7 +14,7 @@
 
 ## 動作環境
 
-- ブラウザ: **Chrome等のChromium系を推奨**。ライブラリの永続化（ドラッグ＆ドロップで追加した動画の保存）に File System Access API を使用する。Firefox/Safariでも基本機能は動くが、ライブラリはセッション内のみ有効
+- ブラウザ: **Chrome等のChromium系を推奨**。フォルダのドラッグ＆ドロップに対応する。ライブラリはセッション中のみ有効（ブラウザを閉じると消える）
 - 開発・ビルド: Node.js 20.19以降または22.12以降（Vite 8の要件）
 
 ## 起動
@@ -40,7 +40,7 @@ npm test         # ヘッドレス Chrome での E2E スモークテスト（tes
 1. 各デッキの「ファイルを開く」またはデッキパネルへのドラッグ＆ドロップでmp4（H.264）をロード（ロードと同時に再生開始）
 2. 「出力ウィンドウ」を開き、プロジェクタ等の画面へ移動してダブルクリックで最大化（ウィンドウをディスプレイいっぱいに広げる）
 3. フェーダーでA/Bをクロスフェード
-4. よく使う動画は「ファイルを追加 / フォルダを追加」またはライブラリ欄へのドラッグ＆ドロップで登録し、「→ A / → B」でロード。「全クリア」でライブラリを空にできる（macOSの `._` メタデータファイルは自動で除外される）。ブラウザ再起動後も残したい場合は**ドラッグ＆ドロップ**で追加する（ボタン経由はそのセッション中のみ有効）
+4. よく使う動画は「ファイルを追加 / フォルダを追加」またはライブラリ欄へのドラッグ＆ドロップ（フォルダごとでもOK）で登録し、「→ A / → B」でロード。「全クリア」でライブラリを空にできる（macOSの `._` メタデータファイルは自動で除外される）。ライブラリはそのセッション中のみ有効（ブラウザを閉じると消える）
 
 ## ホットキー
 
@@ -67,27 +67,27 @@ npm test         # ヘッドレス Chrome での E2E スモークテスト（tes
 
 - コントローラ（[index.html](index.html) + [src/main.ts](src/main.ts)）がデッキ操作・フェーダー・ライブラリ・ホットキーを担当
 - 出力/プレビューウィンドウ（[output.html](output.html) + [src/output.ts](src/output.ts)）は `<video>` 2枚をCSS opacityで重ねた合成結果を表示
-- ウィンドウ間は BroadcastChannel（[src/protocol.ts](src/protocol.ts)）で同期。コントローラが実時間ベースのマスタークロックを持ち、ミラー側は再生速度の微調整で滑らかに追従する
-- ライブラリ（[src/library.ts](src/library.ts)）は FileSystemFileHandle を IndexedDB に保存（動画本体はコピーしない）
+- ウィンドウ間は BroadcastChannel（[src/protocol.ts](src/protocol.ts)）で同期。コントローラが再生位置を配信し、ミラー側は再生速度の微調整で滑らかに追従する
+- ライブラリ（[src/library.ts](src/library.ts)）は登録された動画をメモリ上で保持する（セッション内のみ）
 
 設計の経緯・選択肢の比較は Architecture Decision Record に記録している:
 
 - [ADR-0001: 言語とビルドツールの選定](docs/adr/0001-language-and-build-tooling.md)
 - [ADR-0002: 映像のレンダリングと合成方式](docs/adr/0002-video-rendering-and-blending.md)
 - [ADR-0003: 出力ウィンドウとの同期方式](docs/adr/0003-multi-window-sync.md)
-- [ADR-0004: ライブラリの永続化方式](docs/adr/0004-library-persistence.md)
-- [ADR-0005: バックグラウンド省電力による強制停止への対策](docs/adr/0005-background-throttling-resilience.md)
+- [ADR-0004: ライブラリの永続化方式](docs/adr/0004-library-persistence.md)（廃止 → ADR-0010）
+- [ADR-0005: バックグラウンド省電力による強制停止への対策](docs/adr/0005-background-throttling-resilience.md)（廃止 → ADR-0009 で前提が解消）
 - [ADR-0006: GitHub Pages へのデプロイと base パス戦略](docs/adr/0006-github-pages-deployment.md)
 - [ADR-0007: テスト方針（実ブラウザ E2E スモークテスト）](docs/adr/0007-e2e-smoke-testing.md)
 - [ADR-0008: ファイル選択に File System Access API を使わない](docs/adr/0008-file-picker-vs-fullscreen.md)
 - [ADR-0009: 出力ウィンドウを最大化で全画面表示する](docs/adr/0009-output-window-maximize-instead-of-fullscreen.md)
+- [ADR-0010: ライブラリの永続化を廃止しメモリ保持に統一する](docs/adr/0010-drop-library-persistence.md)
 
 機能要件は [REQUIREMENT.md](REQUIREMENT.md) を参照。
 
 ## TODO
 
 - ルマキー等のミックスエフェクト（WebGL移行が必要、ADR-0002参照）
-- ライブラリのディレクトリハンドル単位の保存で許可プロンプトを削減（ADR-0004参照）
 - 再生速度（ピッチ）調整によるBPM同期
 
 ## 開発について

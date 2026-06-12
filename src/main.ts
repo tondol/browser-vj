@@ -1,5 +1,5 @@
 import { CHANNEL_NAME, type DeckId, type VjMessage } from "./protocol";
-import { Library, supportsFsAccess, type LibraryEntry } from "./library";
+import { Library, type LibraryEntry } from "./library";
 
 const NUDGE_FINE_MS = 100;
 const NUDGE_COARSE_MS = 1000;
@@ -23,12 +23,8 @@ interface Deck {
   playButton: HTMLButtonElement;
   url: string | null;
   fileName: string;
-  // マスタークロック。video要素はブラウザの省電力で勝手に止まる・凍るため、
-  // 配信する再生状態は常にここから導出し、videoはクロックに追従するプレビューとして扱う
   playing: boolean;
   loop: boolean;
-  anchorMediaTime: number;
-  anchorWallTime: number;
 }
 
 function createDeck(id: DeckId): Deck {
@@ -43,13 +39,14 @@ function createDeck(id: DeckId): Deck {
     fileName: "",
     playing: false,
     loop: true,
-    anchorMediaTime: 0,
-    anchorWallTime: 0,
   };
-  deck.video.addEventListener("pause", () => {
-    // ブラウザ都合の強制停止なら再開を試みる（クロックには影響しない）。
-    // ループオフで終端に達した場合の停止はクロック側で扱う
-    if (deck.playing && !deck.video.ended) void deck.video.play().catch(() => {});
+  // ループオフで終端に達したら停止状態に落とす
+  deck.video.addEventListener("ended", () => {
+    if (deck.playing) {
+      deck.playing = false;
+      deck.playButton.textContent = "再生";
+      post({ type: "pause", deck: deck.id });
+    }
   });
   deck.playButton.addEventListener("click", () => togglePlay(deck));
   const loopCheckbox = $<HTMLInputElement>(`loop-${id}`);
@@ -69,59 +66,24 @@ const deckA = createDeck("a");
 const deckB = createDeck("b");
 const decks = [deckA, deckB];
 
-function currentDeckTime(deck: Deck): number {
-  if (!deck.playing) return deck.anchorMediaTime;
-  const elapsed = (Date.now() - deck.anchorWallTime) / 1000;
-  const time = deck.anchorMediaTime + elapsed;
-  const duration = deck.video.duration;
-  if (!duration) return time;
-  return deck.loop ? time % duration : Math.min(time, duration);
-}
-
-// ループオフ時、クロックが終端へ達したら停止状態に落とす
-function stopAtEndIfNeeded(deck: Deck): void {
-  const duration = deck.video.duration;
-  if (!deck.playing || deck.loop || !duration) return;
-  const elapsed = (Date.now() - deck.anchorWallTime) / 1000;
-  if (deck.anchorMediaTime + elapsed < duration) return;
-  stopPlayback(deck, duration);
-}
-
 function setLoop(deck: Deck, value: boolean): void {
-  deck.anchorMediaTime = currentDeckTime(deck);
-  deck.anchorWallTime = Date.now();
   deck.loop = value;
   deck.video.loop = value;
   post({ type: "loop", deck: deck.id, value });
 }
 
-// プレビューのvideoがクロックからずれていたら合わせる（ループ境界をまたぐ場合は補正しない）
-function alignPreview(deck: Deck): void {
-  const duration = deck.video.duration;
-  if (!deck.url || !duration) return;
-  const target = currentDeckTime(deck);
-  const raw = Math.abs(deck.video.currentTime - target);
-  const distance = Math.min(raw, duration - raw);
-  const threshold = deck.playing ? 0.3 : 0.02;
-  if (distance > threshold) deck.video.currentTime = target;
-}
-
 function startPlayback(deck: Deck): void {
-  deck.anchorWallTime = Date.now();
   deck.playing = true;
   deck.playButton.textContent = "停止";
   void deck.video.play();
   post({ type: "play", deck: deck.id });
 }
 
-function stopPlayback(deck: Deck, atTime: number): void {
-  deck.anchorMediaTime = atTime;
+function stopPlayback(deck: Deck): void {
   deck.playing = false;
   deck.playButton.textContent = "再生";
   deck.video.pause();
-  deck.video.currentTime = atTime;
   post({ type: "pause", deck: deck.id });
-  post({ type: "seek", deck: deck.id, time: atTime });
 }
 
 function loadFile(deck: Deck, file: File): void {
@@ -132,7 +94,6 @@ function loadFile(deck: Deck, file: File): void {
   deck.nameLabel.textContent = file.name;
   deck.seekBar.disabled = false;
   deck.playButton.disabled = false;
-  deck.anchorMediaTime = 0;
   post({ type: "load", deck: deck.id, url: deck.url, name: file.name });
   startPlayback(deck);
   if (oldUrl) {
@@ -144,13 +105,12 @@ function loadFile(deck: Deck, file: File): void {
 function togglePlay(deck: Deck): void {
   if (!deck.url) return;
   if (deck.playing) {
-    stopPlayback(deck, currentDeckTime(deck));
+    stopPlayback(deck);
     return;
   }
   const duration = deck.video.duration;
-  if (duration && deck.anchorMediaTime >= duration) {
-    // 終端で停止していたら頭出しして再生
-    seekTo(deck, 0);
+  if (duration && deck.video.currentTime >= duration) {
+    seekTo(deck, 0); // 終端で停止していたら頭出しして再生
   }
   startPlayback(deck);
 }
@@ -159,14 +119,12 @@ function seekTo(deck: Deck, time: number): void {
   if (!deck.url) return;
   const duration = deck.video.duration || 0;
   const clamped = Math.min(Math.max(time, 0), duration);
-  deck.anchorMediaTime = clamped;
-  deck.anchorWallTime = Date.now();
   deck.video.currentTime = clamped;
   post({ type: "seek", deck: deck.id, time: clamped });
 }
 
 function nudge(deck: Deck, ms: number): void {
-  seekTo(deck, currentDeckTime(deck) + ms / 1000);
+  seekTo(deck, deck.video.currentTime + ms / 1000);
 }
 
 // --- フェーダー (0 = A, 1 = B) ---
@@ -190,8 +148,6 @@ faderInput.addEventListener("change", () => faderInput.blur());
 
 // --- ファイル選択 ---
 
-type FileSource = FileSystemFileHandle | File;
-
 function isMp4(name: string): boolean {
   // "._" で始まるファイルはmacOSのAppleDoubleメタデータなので除外する
   return name.toLowerCase().endsWith(".mp4") && !name.startsWith("._");
@@ -208,9 +164,7 @@ function pickWithInput(setup: (input: HTMLInputElement) => void): Promise<File[]
   });
 }
 
-// ファイル選択は常に <input> 経由にする。File System Access API
-// （showOpenFilePicker 等）は呼び出し時に同一オリジンの別ウィンドウの
-// フルスクリーンを解除してしまうため、出力ウィンドウ運用と相性が悪い。
+// ファイル選択は <input> 経由（File System Access API は使わない。ADR-0008）
 function pickVideoFiles(multiple: boolean): Promise<File[]> {
   return pickWithInput((input) => {
     input.accept = "video/mp4";
@@ -234,16 +188,8 @@ async function loadFromPicker(deck: Deck): Promise<void> {
 
 // --- ライブラリ ---
 
-const library = await Library.open();
+const library = new Library();
 const libraryList = $<HTMLUListElement>("library-list");
-
-// ボタン（<input>）追加は常にセッション内のみ。永続化はドラッグ＆ドロップ経由で、
-// かつ File System Access API 対応ブラウザのときだけ可能。
-const libraryNote = $("library-note");
-libraryNote.textContent = supportsFsAccess
-  ? "ボタンで追加した動画はこのセッション中のみ有効です。再起動後も残すにはドラッグ＆ドロップで追加してください。"
-  : "このブラウザではライブラリは保存されません（このセッション中のみ有効）。";
-libraryNote.hidden = false;
 
 // entry.id -> サムネ dataURL。再描画での再デコードを避けるためのキャッシュ。
 const thumbnailCache = new Map<number, string>();
@@ -327,13 +273,14 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
   removeButton.title = "ライブラリから削除";
   removeButton.addEventListener("click", () => {
     thumbnailCache.delete(entry.id);
-    void library.remove(entry.id).then(renderLibrary);
+    library.remove(entry.id);
+    renderLibrary();
   });
   thumb.append(removeButton);
 
   const name = document.createElement("span");
   name.className = "entry-name";
-  name.textContent = entry.name + (entry.persisted ? "" : "（保存なし）");
+  name.textContent = entry.name;
   name.title = entry.name;
 
   const actions = document.createElement("div");
@@ -341,7 +288,7 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
   for (const deck of decks) {
     const button = document.createElement("button");
     button.textContent = `→ ${deck.id.toUpperCase()}`;
-    button.addEventListener("click", () => void loadFromLibrary(entry, deck));
+    button.addEventListener("click", () => loadFromLibrary(entry, deck));
     actions.append(button);
   }
 
@@ -351,11 +298,8 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
   if (cached) {
     thumb.style.backgroundImage = `url(${cached})`;
   } else {
-    // サムネは権限プロンプトを出さずに取れる場合だけ生成し、後から差し込む。
-    // 生成結果は entry.id でキャッシュし、再描画での再デコードを避ける。
-    void library.getFileIfReady(entry).then(async (file) => {
-      if (!file) return;
-      const dataUrl = await createThumbnail(file);
+    // サムネを生成して後から差し込み、entry.id でキャッシュして再デコードを避ける
+    void createThumbnail(entry.file).then((dataUrl) => {
       if (!dataUrl) return;
       thumbnailCache.set(entry.id, dataUrl);
       thumb.style.backgroundImage = `url(${dataUrl})`;
@@ -365,24 +309,18 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
   return li;
 }
 
-async function loadFromLibrary(entry: LibraryEntry, deck: Deck): Promise<void> {
-  const file = await library.getFile(entry);
-  if (!file) {
-    alert(`「${entry.name}」を読み込めませんでした（移動・削除された可能性があります）`);
-    return;
-  }
-  loadFile(deck, file);
+function loadFromLibrary(entry: LibraryEntry, deck: Deck): void {
+  loadFile(deck, entry.file);
 }
 
-async function renderLibrary(): Promise<void> {
-  const entries = await library.list();
-  libraryList.replaceChildren(...entries.map(entryTile));
+function renderLibrary(): void {
+  libraryList.replaceChildren(...library.list().map(entryTile));
 }
 
-async function addToLibrary(sources: FileSource[]): Promise<void> {
-  if (sources.length === 0) return; // 選択キャンセル時など、無駄な再描画を避ける
-  for (const source of sources) await library.add(source);
-  await renderLibrary();
+function addToLibrary(files: File[]): void {
+  if (files.length === 0) return; // 選択キャンセル時など、無駄な再描画を避ける
+  for (const file of files) library.add(file);
+  renderLibrary();
 }
 
 $("btn-add-files").addEventListener("click", () => {
@@ -394,10 +332,11 @@ $("btn-add-folder").addEventListener("click", () => {
 $("btn-clear-library").addEventListener("click", () => {
   if (!confirm("ライブラリを全て削除しますか？")) return;
   thumbnailCache.clear();
-  void library.clear().then(renderLibrary);
+  library.clear();
+  renderLibrary();
 });
 
-void renderLibrary();
+renderLibrary();
 
 // --- ドラッグ＆ドロップ ---
 
@@ -428,22 +367,50 @@ for (const deck of decks) {
   });
 }
 
+function entryFile(entry: FileSystemFileEntry): Promise<File> {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+
+function readDirEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+}
+
+// ドロップされた entry（ファイル / フォルダ）を再帰的にたどり、mp4 を集める。
+async function collectMp4Files(
+  entries: (FileSystemEntry | null)[],
+): Promise<File[]> {
+  const files: File[] = [];
+  for (const entry of entries) {
+    if (!entry) continue;
+    if (entry.isFile) {
+      const file = await entryFile(entry as FileSystemFileEntry);
+      if (isMp4(file.name)) files.push(file);
+    } else if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      // readEntries は1回で全件返るとは限らないので空になるまで繰り返す
+      const children: FileSystemEntry[] = [];
+      for (;;) {
+        const batch = await readDirEntries(reader);
+        if (batch.length === 0) break;
+        children.push(...batch);
+      }
+      files.push(...(await collectMp4Files(children)));
+    }
+  }
+  return files;
+}
+
 setupDropZone($("library"), (dataTransfer) => {
-  // getAsFileSystemHandle / getAsFile はdropイベント中に同期的に呼ぶ必要がある
-  const pending = [...dataTransfer.items]
+  // webkitGetAsEntry は drop イベント中に同期的に呼ぶ必要がある。
+  // 取れればフォルダも展開できる。取れない環境では files へフォールバック。
+  const entries = [...dataTransfer.items]
     .filter((item) => item.kind === "file")
-    .map((item) => {
-      const file = item.getAsFile();
-      const handle = item.getAsFileSystemHandle?.() ?? Promise.resolve(null);
-      return handle.then((h) => h ?? file).catch(() => file);
-    });
-  void Promise.all(pending).then((handles) => {
-    const sources = handles.filter(
-      (h): h is FileSource =>
-        h != null && (h instanceof File || h.kind === "file") && isMp4(h.name),
-    );
-    return addToLibrary(sources);
-  });
+    .map((item) => item.webkitGetAsEntry?.() ?? null);
+  if (entries.some((e) => e !== null)) {
+    void collectMp4Files(entries).then((files) => addToLibrary(files));
+  } else {
+    addToLibrary([...dataTransfer.files].filter((f) => isMp4(f.name)));
+  }
 });
 
 // --- 出力 / プレビューウィンドウ ---
@@ -467,7 +434,7 @@ channel.onmessage = (event) => {
     if (!deck.url) continue;
     post({ type: "load", deck: deck.id, url: deck.url, name: deck.fileName });
     post({ type: "loop", deck: deck.id, value: deck.loop });
-    post({ type: "seek", deck: deck.id, time: currentDeckTime(deck) });
+    post({ type: "seek", deck: deck.id, time: deck.video.currentTime });
     post({ type: deck.playing ? "play" : "pause", deck: deck.id });
   }
   post({ type: "fader", value: faderPosition });
@@ -476,11 +443,10 @@ channel.onmessage = (event) => {
 setInterval(() => {
   for (const deck of decks) {
     if (!deck.url) continue;
-    stopAtEndIfNeeded(deck);
     post({
       type: "sync",
       deck: deck.id,
-      time: currentDeckTime(deck),
+      time: deck.video.currentTime,
       playing: deck.playing,
       sentAt: Date.now(),
     });
@@ -498,8 +464,6 @@ function formatTime(time: number): string {
 
 function tick(): void {
   for (const deck of decks) {
-    stopAtEndIfNeeded(deck);
-    alignPreview(deck);
     const { video } = deck;
     deck.timeLabel.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
     if (deck.url && video.duration && document.activeElement !== deck.seekBar) {

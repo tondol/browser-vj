@@ -151,11 +151,6 @@ button:disabled {
   align-items: center;
 }
 
-.library-note {
-  color: #cc9933;
-  font-size: 12px;
-}
-
 #library-list {
   list-style: none;
   margin: 8px 0 0;
