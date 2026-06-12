@@ -1,0 +1,8 @@
+# dependencies / build
+node_modules/
+dist/
+
+# local environment
+.claude/
+.DS_Store
+*.log

@@ -1,0 +1,23 @@
+{
+  "name": "browser-vj",
+  "version": "2.0.0",
+  "description": "ブラウザ上で動作するシンプルな2デッキVJツール",
+  "license": "MIT",
+  "author": "tondol",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.1.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.14"
+  }
+}

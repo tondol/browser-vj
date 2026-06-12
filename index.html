@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>browser-vj — ブラウザで動くシンプルな2デッキVJツール</title>
+    <meta
+      name="description"
+      content="ローカルのmp4をロードして2デッキでクロスフェードできる、ブラウザ上で動くシンプルなVJツール。"
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="browser-vj — ブラウザで動くシンプルな2デッキVJツール" />
+    <meta
+      property="og:description"
+      content="ローカルのmp4をロードして2デッキでクロスフェードできる、ブラウザ上で動くシンプルなVJツール。"
+    />
+    <meta property="og:url" content="https://tondol.github.io/browser-vj/" />
+    <meta property="og:image" content="https://tondol.github.io/browser-vj/ogp.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>browser-vj</h1>
+      <div class="header-buttons">
+        <button id="btn-output">出力ウィンドウ</button>
+        <button id="btn-preview">プレビューウィンドウ</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="deck" id="deck-a">
+        <h2>Deck A</h2>
+        <video id="video-a" muted playsinline loop></video>
+        <div class="deck-info">
+          <span class="deck-name" id="name-a">（未ロード）</span>
+          <span class="deck-time" id="time-a">-:--.--- / -:--.---</span>
+        </div>
+        <input type="range" id="seek-a" min="0" max="1000" value="0" disabled />
+        <div class="deck-controls">
+          <button id="btn-load-a">ファイルを開く</button>
+          <button id="btn-play-a" disabled>再生</button>
+          <label class="loop-label"><input type="checkbox" id="loop-a" checked />ループ</label>
+          <span class="nudge-group">
+            <button class="nudge" data-deck="a" data-ms="-1000">-1s</button>
+            <button class="nudge" data-deck="a" data-ms="-100">-100ms</button>
+            <button class="nudge" data-deck="a" data-ms="100">+100ms</button>
+            <button class="nudge" data-deck="a" data-ms="1000">+1s</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="fader-section">
+        <h2>Fader</h2>
+        <div class="fader-labels"><span>A</span><span>B</span></div>
+        <input type="range" id="fader" min="0" max="1000" value="0" />
+        <output id="fader-value">A 100%</output>
+      </section>
+
+      <section class="deck" id="deck-b">
+        <h2>Deck B</h2>
+        <video id="video-b" muted playsinline loop></video>
+        <div class="deck-info">
+          <span class="deck-name" id="name-b">（未ロード）</span>
+          <span class="deck-time" id="time-b">-:--.--- / -:--.---</span>
+        </div>
+        <input type="range" id="seek-b" min="0" max="1000" value="0" disabled />
+        <div class="deck-controls">
+          <button id="btn-load-b">ファイルを開く</button>
+          <button id="btn-play-b" disabled>再生</button>
+          <label class="loop-label"><input type="checkbox" id="loop-b" checked />ループ</label>
+          <span class="nudge-group">
+            <button class="nudge" data-deck="b" data-ms="-1000">-1s</button>
+            <button class="nudge" data-deck="b" data-ms="-100">-100ms</button>
+            <button class="nudge" data-deck="b" data-ms="100">+100ms</button>
+            <button class="nudge" data-deck="b" data-ms="1000">+1s</button>
+          </span>
+        </div>
+      </section>
+    </main>
+
+    <section class="library" id="library">
+      <div class="library-header">
+        <h2>ライブラリ</h2>
+        <div>
+          <button id="btn-add-files">ファイルを追加</button>
+          <button id="btn-add-folder">フォルダを追加</button>
+          <button id="btn-clear-library">全クリア</button>
+        </div>
+      </div>
+      <p class="library-note" id="library-note" hidden>
+        このブラウザでは File System Access API が使えないため、ライブラリは保存されません（このセッション中のみ有効）。
+      </p>
+      <ul id="library-list"></ul>
+    </section>
+
+    <footer>
+      <details>
+        <summary>ホットキー</summary>
+        <table>
+          <tr><td>← / →</td><td>フェーダー移動（Shiftで微調整）</td></tr>
+          <tr><td>1 / 2</td><td>フェーダーをA / Bへ一気に切り替え</td></tr>
+          <tr><td>S</td><td>Deck A 再生/停止</td></tr>
+          <tr><td>L</td><td>Deck B 再生/停止</td></tr>
+          <tr><td>Q / W</td><td>Deck A 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
+          <tr><td>O / P</td><td>Deck B 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
+        </table>
+        <p>ホットキーは出力/プレビューウィンドウにフォーカスがあるときも有効。</p>
+      </details>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

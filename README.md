@@ -1,0 +1,97 @@
+# browser-vj
+
+ブラウザ上で動作するシンプルな2デッキVJツール。インストール不要・依存ゼロ（ランタイム）で、ローカルのmp4をロードしてクロスフェードできる。
+
+![コントローラ画面](docs/images/controller.png)
+
+## 特徴
+
+- **2デッキ + クロスフェーダー** — A/Bにmp4（H.264）をロードしてフェーダーでミックス
+- **出力 / プレビューウィンドウ** — コントローラとは別ウィンドウに合成結果を表示。プロジェクタへ移してダブルクリックでフルスクリーン
+- **手動リップシンク** — 各デッキの再生位置を±100ms / ±1sで微調整（ホットキー対応）
+- **ライブラリ** — よく使う動画を登録してワンクリックでデッキへ。フォルダまとめ登録・ドラッグ＆ドロップ対応
+- **GPU任せの軽さ** — デコードはハードウェア、合成はGPUコンポジタ。JS側にフレーム処理なし
+
+## 動作環境
+
+- ブラウザ: **Chrome等のChromium系を推奨**。ライブラリの永続化・フォルダ読み込みに File System Access API を使用する。Firefox/Safariでも基本機能は動くが、ライブラリはセッション内のみ有効
+- 開発・ビルド: Node.js 20.19以降または22.12以降（Vite 8の要件）
+
+## 起動
+
+```sh
+npm install
+npm run dev      # 開発サーバ（http://localhost:5173）
+npm run build    # 型チェック + dist/ へビルド
+npm run preview  # ビルド結果の確認
+npm test         # ヘッドレス Chrome での E2E スモークテスト（test/ 参照）
+```
+
+ビルド成果物は静的ファイルのみなので、任意の静的ホスティングで配信できる（同一オリジンで `index.html` と `output.html` を配信すること）。
+
+### GitHub Pages で公開する
+
+`main` ブランチへの push で [.github/workflows/deploy.yml](.github/workflows/deploy.yml) が自動ビルド・デプロイする。リポジトリの **Settings → Pages → Build and deployment → Source** を「**GitHub Actions**」に設定すれば有効になる。
+
+サブパス（`https://<user>.github.io/<repo>/`）配信のための `base` は、CI 上で `GITHUB_REPOSITORY` から自動的に決まる（[vite.config.ts](vite.config.ts)）。ローカルの `npm run dev` / `npm run preview` では `/` のまま動く。
+
+## 使い方
+
+1. 各デッキの「ファイルを開く」またはデッキパネルへのドラッグ＆ドロップでmp4（H.264）をロード（ロードと同時に再生開始）
+2. 「出力ウィンドウ」を開き、プロジェクタ等の画面へ移動してダブルクリックでフルスクリーン化
+3. フェーダーでA/Bをクロスフェード
+4. よく使う動画は「ファイルを追加 / フォルダを追加」またはライブラリ欄へのドラッグ＆ドロップで登録し、「→ A / → B」でロード。「全クリア」でライブラリを空にできる（macOSの `._` メタデータファイルは自動で除外される）
+
+## ホットキー
+
+| キー | 動作 |
+| --- | --- |
+| ← / → | フェーダー移動（5%、Shiftで1%） |
+| 1 / 2 | フェーダーをA / Bへ一気に切り替え |
+| S | Deck A 再生/停止 |
+| L | Deck B 再生/停止 |
+| Q / W | Deck A 再生位置 -100ms / +100ms（Shiftで±1s） |
+| O / P | Deck B 再生位置 -100ms / +100ms（Shiftで±1s） |
+
+各デッキの ±100ms / ±1s ナッジボタンでも同じ調整ができる。ホットキーは出力/プレビューウィンドウにフォーカスがあるときも有効。
+
+## 既知の制限
+
+- 音声は出力しない（全デッキミュート）。曲は別系統で再生する前提
+- 動画は再生終了後デフォルトでループする（各デッキの「ループ」チェックでオフにでき、その場合は最終フレームで停止する）
+- ミックスはアルファブレンドのクロスフェードのみ（ルマキー等のエフェクトは未対応）
+- ウィンドウ間の映像同期はフレーム単位の保証はなく、±20ms程度のずれが残りうる
+- ライブラリ登録したファイルを移動・削除するとロードに失敗する（ファイルはコピーせず参照のみ保持するため）
+
+## 仕組み
+
+- コントローラ（[index.html](index.html) + [src/main.ts](src/main.ts)）がデッキ操作・フェーダー・ライブラリ・ホットキーを担当
+- 出力/プレビューウィンドウ（[output.html](output.html) + [src/output.ts](src/output.ts)）は `<video>` 2枚をCSS opacityで重ねた合成結果を表示
+- ウィンドウ間は BroadcastChannel（[src/protocol.ts](src/protocol.ts)）で同期。コントローラが実時間ベースのマスタークロックを持ち、ミラー側は再生速度の微調整で滑らかに追従する
+- ライブラリ（[src/library.ts](src/library.ts)）は FileSystemFileHandle を IndexedDB に保存（動画本体はコピーしない）
+
+設計の経緯・選択肢の比較は Architecture Decision Record に記録している:
+
+- [ADR-0001: 言語とビルドツールの選定](docs/adr/0001-language-and-build-tooling.md)
+- [ADR-0002: 映像のレンダリングと合成方式](docs/adr/0002-video-rendering-and-blending.md)
+- [ADR-0003: 出力ウィンドウとの同期方式](docs/adr/0003-multi-window-sync.md)
+- [ADR-0004: ライブラリの永続化方式](docs/adr/0004-library-persistence.md)
+- [ADR-0005: バックグラウンド省電力による強制停止への対策](docs/adr/0005-background-throttling-resilience.md)
+- [ADR-0006: GitHub Pages へのデプロイと base パス戦略](docs/adr/0006-github-pages-deployment.md)
+- [ADR-0007: テスト方針（実ブラウザ E2E スモークテスト）](docs/adr/0007-e2e-smoke-testing.md)
+
+機能要件は [REQUIREMENT.md](REQUIREMENT.md) を参照。
+
+## TODO
+
+- ルマキー等のミックスエフェクト（WebGL移行が必要、ADR-0002参照）
+- ライブラリのディレクトリハンドル単位の保存で許可プロンプトを削減（ADR-0004参照）
+- 再生速度（ピッチ）調整によるBPM同期
+
+## 開発について
+
+本プロジェクトの設計・実装・テストは [Claude Code](https://claude.com/claude-code)（Anthropic）で行った。要件定義（[REQUIREMENT.md](REQUIREMENT.md)）と動作確認は人間による。
+
+## ライセンス
+
+[MIT](LICENSE)
