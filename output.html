@@ -24,6 +24,10 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+        /* object-fit:contain のレターボックス部は透明なので、アスペクト比が
+           異なると上の deck の黒帯から下の deck が透けて見えてしまう。
+           背景を黒で塗り、表示側の帯部分が下を隠すようにする。 */
+        background: #000;
       }
       .hint {
         position: absolute;

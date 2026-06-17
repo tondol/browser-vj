@@ -30,11 +30,18 @@ h2 {
   letter-spacing: 0.08em;
 }
 
+/* deck を見ながらライブラリを探せるよう、deck エリアを上部に固定表示する。
+   スクロールしても下のライブラリが透けないよう背景色を敷く。 */
 main {
   display: grid;
   grid-template-columns: 1fr 180px 1fr;
   gap: 16px;
   align-items: start;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 0;
+  background: #16161c;
 }
 
 .deck,

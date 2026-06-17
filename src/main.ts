@@ -317,17 +317,28 @@ function renderLibrary(): void {
   libraryList.replaceChildren(...library.list().map(entryTile));
 }
 
-function addToLibrary(files: File[]): void {
-  if (files.length === 0) return; // 選択キャンセル時など、無駄な再描画を避ける
-  for (const file of files) library.add(file);
+interface LibraryItem {
+  file: File;
+  path: string; // ソート用のフルパス
+}
+
+function addToLibrary(items: LibraryItem[]): void {
+  if (items.length === 0) return; // 選択キャンセル時など、無駄な再描画を避ける
+  for (const item of items) library.add(item.file, item.path);
   renderLibrary();
 }
 
+// <input> 経由（ファイル / フォルダ追加）。フォルダ追加では webkitRelativePath が
+// "dir/sub/clip.mp4" 形式で取れる。単体ファイルでは空なので name で代用する。
+function itemsFromInput(files: File[]): LibraryItem[] {
+  return files.map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+}
+
 $("btn-add-files").addEventListener("click", () => {
-  void pickVideoFiles(true).then(addToLibrary);
+  void pickVideoFiles(true).then((files) => addToLibrary(itemsFromInput(files)));
 });
 $("btn-add-folder").addEventListener("click", () => {
-  void pickFolderVideos().then(addToLibrary);
+  void pickFolderVideos().then((files) => addToLibrary(itemsFromInput(files)));
 });
 $("btn-clear-library").addEventListener("click", () => {
   if (!confirm("ライブラリを全て削除しますか？")) return;
@@ -376,15 +387,17 @@ function readDirEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEn
 }
 
 // ドロップされた entry（ファイル / フォルダ）を再帰的にたどり、mp4 を集める。
+// path は entry.fullPath（"/dir/sub/clip.mp4"）。File.webkitRelativePath は
+// この経路では空になるため、ソート用パスは fullPath から取る。
 async function collectMp4Files(
   entries: (FileSystemEntry | null)[],
-): Promise<File[]> {
-  const files: File[] = [];
+): Promise<LibraryItem[]> {
+  const items: LibraryItem[] = [];
   for (const entry of entries) {
     if (!entry) continue;
     if (entry.isFile) {
       const file = await entryFile(entry as FileSystemFileEntry);
-      if (isMp4(file.name)) files.push(file);
+      if (isMp4(file.name)) items.push({ file, path: entry.fullPath });
     } else if (entry.isDirectory) {
       const reader = (entry as FileSystemDirectoryEntry).createReader();
       // readEntries は1回で全件返るとは限らないので空になるまで繰り返す
@@ -394,10 +407,10 @@ async function collectMp4Files(
         if (batch.length === 0) break;
         children.push(...batch);
       }
-      files.push(...(await collectMp4Files(children)));
+      items.push(...(await collectMp4Files(children)));
     }
   }
-  return files;
+  return items;
 }
 
 setupDropZone($("library"), (dataTransfer) => {
@@ -407,9 +420,9 @@ setupDropZone($("library"), (dataTransfer) => {
     .filter((item) => item.kind === "file")
     .map((item) => item.webkitGetAsEntry?.() ?? null);
   if (entries.some((e) => e !== null)) {
-    void collectMp4Files(entries).then((files) => addToLibrary(files));
+    void collectMp4Files(entries).then((items) => addToLibrary(items));
   } else {
-    addToLibrary([...dataTransfer.files].filter((f) => isMp4(f.name)));
+    addToLibrary(itemsFromInput([...dataTransfer.files].filter((f) => isMp4(f.name))));
   }
 });
 

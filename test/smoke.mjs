@@ -1,5 +1,5 @@
 // コア機能のスモークテスト: ロード・出力ミラー・フェーダー・ナッジ・ループ・
-// ライブラリ・ドラッグ&ドロップ・"._" 除外を一通り検証する。
+// ライブラリ（パス順ソート含む）・ドラッグ&ドロップ・"._" 除外を一通り検証する。
 //
 // 事前に dev サーバ（npm run dev）を起動しておくこと。
 //   npm run dev &
@@ -121,12 +121,15 @@ let dialogResponses = [false, true]; // 1回目キャンセル / 2回目OK
 page.on("dialog", (d) => void (dialogResponses.shift() ? d.accept() : d.dismiss()));
 
 await dropFile(page, "#library", red, "._meta.mp4");
-await dropFile(page, "#library", red, "clip1.mp4");
+// 追加順と無関係にパス（ここではファイル名）の自然順で並ぶことを確認するため、
+// あえて clip10 を先に、clip2 を後に投入する。
+await dropFile(page, "#library", red, "clip10.mp4");
 await dropFile(page, "#library", blue, "clip2.mp4");
 await sleep(500);
 const names = await page.evaluate(() => [...document.querySelectorAll("#library-list .entry-name")].map((e) => e.textContent));
 check("'._' metadata file ignored", !names.some((n) => n.includes("._meta")), names.join(","));
 check("normal files added", names.length === 2, `count=${names.length}`);
+check("library sorted by natural path order", names.join(",") === "clip2.mp4,clip10.mp4", names.join(","));
 
 // タイルのサムネが生成され、background-image が入る
 await sleep(800);
@@ -148,7 +151,8 @@ const deckB = await page.evaluate(() => {
   const v = document.getElementById("video-b");
   return { name: document.getElementById("name-b").textContent, playing: !v.paused };
 });
-check("library tile loads deck B", deckB.name === "clip1.mp4" && deckB.playing, deckB.name);
+// ソート後の先頭タイルは clip2.mp4（clip10 より自然順で前）
+check("library tile loads deck B", deckB.name === "clip2.mp4" && deckB.playing, deckB.name);
 
 await page.click("#btn-clear-library"); // キャンセル
 await sleep(300);
