@@ -1,5 +1,5 @@
-// コア機能のスモークテスト: ロード・出力ミラー・フェーダー・ナッジ・ループ・
-// ライブラリ（パス順ソート含む）・ドラッグ&ドロップ・"._" 除外を一通り検証する。
+// コア機能のスモークテスト: ロード・出力ミラー・埋め込みプレビュー・フェーダー・
+// ナッジ・ループ・ライブラリ（パス順ソート含む）・ドラッグ&ドロップ・"._" 除外を検証する。
 //
 // 事前に dev サーバ（npm run dev）を起動しておくこと。
 //   npm run dev &
@@ -161,15 +161,23 @@ await page.click("#btn-clear-library"); // OK
 await sleep(300);
 check("clear empties library", (await page.evaluate(() => document.querySelectorAll("#library-list li").length)) === 0);
 
-// --- 後から開いたプレビューウィンドウへの状態復元 ---
-const preview = await openOutputWindow(browser, page, "btn-preview");
-collectErrors(preview, "preview", errors);
-await sleep(800);
-const restored = await preview.evaluate(() => {
-  const v = document.getElementById("video-a");
-  return { hasSrc: !!v.src, playing: !v.paused };
+// --- 埋め込みプレビューがデッキ動画に追従する ---
+// deck A には冒頭で red.mp4 をロード済み。埋め込みプレビューの preview-a が
+// 同じソースを持ち、再生位置がデッキに追従していることを確認する。
+const previewState = await page.evaluate(() => {
+  const deck = document.getElementById("video-a");
+  const pv = document.getElementById("preview-a");
+  return {
+    hasSrc: !!pv.src,
+    sameSrc: pv.src === deck.src,
+    drift: Math.abs(pv.currentTime - deck.currentTime),
+  };
 });
-check("late preview restores state", restored.hasSrc && restored.playing);
+check(
+  "embedded preview follows deck",
+  previewState.hasSrc && previewState.sameSrc && previewState.drift < 0.3,
+  `drift=${previewState.drift.toFixed(3)}`,
+);
 
 check("no JS errors", errors.length === 0, errors.join(" | "));
 

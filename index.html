@@ -27,7 +27,6 @@
       <h1>browser-vj</h1>
       <div class="header-buttons">
         <button id="btn-output">出力ウィンドウ</button>
-        <button id="btn-preview">プレビューウィンドウ</button>
       </div>
     </header>
 
@@ -54,6 +53,10 @@
       </section>
 
       <section class="fader-section">
+        <div class="preview" id="preview">
+          <video id="preview-a" muted playsinline></video>
+          <video id="preview-b" muted playsinline></video>
+        </div>
         <h2>Fader</h2>
         <div class="fader-labels"><span>A</span><span>B</span></div>
         <input type="range" id="fader" min="0" max="1000" value="0" />

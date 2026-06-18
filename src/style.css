@@ -34,7 +34,9 @@ h2 {
    スクロールしても下のライブラリが透けないよう背景色を敷く。 */
 main {
   display: grid;
-  grid-template-columns: 1fr 180px 1fr;
+  /* 中央カラムは下限 180px を保ちつつ、画面が広いときはデッキの 0.5 倍まで
+     伸ばし、埋め込みプレビューを大きく見せる */
+  grid-template-columns: 1fr minmax(180px, 0.5fr) 1fr;
   gap: 16px;
   align-items: start;
   position: sticky;
@@ -146,6 +148,35 @@ button:disabled {
   font-size: 12px;
   color: #99a;
   font-variant-numeric: tabular-nums;
+}
+
+/* プレビューの下に来る Fader 見出しとの間に余白をとる */
+.fader-section .preview + h2 {
+  margin-top: 16px;
+}
+
+.preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  background: #000;
+  overflow: hidden;
+  /* デッキは h2「Deck A」の下に映像が来る。プレビューには見出しが無いので、
+     その h2 相当の高さ（line-height + margin-bottom）を上に空けて、
+     映像の上端をデッキ A/B と揃える */
+  margin-top: calc(12px * 1.2 + 8px);
+}
+
+.preview video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* output.html と同様、レターボックス部を黒で塗ってアスペクト比違いで
+     下のデッキが透けないようにする */
+  background: #000;
 }
 
 .library {

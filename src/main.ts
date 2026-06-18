@@ -69,6 +69,7 @@ const decks = [deckA, deckB];
 function setLoop(deck: Deck, value: boolean): void {
   deck.loop = value;
   deck.video.loop = value;
+  previewVideos[deck.id].loop = value;
   post({ type: "loop", deck: deck.id, value });
 }
 
@@ -94,6 +95,7 @@ function loadFile(deck: Deck, file: File): void {
   deck.nameLabel.textContent = file.name;
   deck.seekBar.disabled = false;
   deck.playButton.disabled = false;
+  previewVideos[deck.id].src = deck.url;
   post({ type: "load", deck: deck.id, url: deck.url, name: file.name });
   startPlayback(deck);
   if (oldUrl) {
@@ -138,6 +140,7 @@ function setFader(value: number, updateInput = true): void {
   if (updateInput) faderInput.value = String(Math.round(faderPosition * 1000));
   const b = Math.round(faderPosition * 100);
   faderLabel.textContent = `A ${100 - b}% / B ${b}%`;
+  previewVideos.b.style.opacity = String(faderPosition);
   post({ type: "fader", value: faderPosition });
 }
 
@@ -426,15 +429,34 @@ setupDropZone($("library"), (dataTransfer) => {
   }
 });
 
-// --- 出力 / プレビューウィンドウ ---
+// --- 出力ウィンドウ ---
 
 const outputUrl = `${import.meta.env.BASE_URL}output.html`;
 $("btn-output").addEventListener("click", () => {
   window.open(outputUrl, "vj-output", "width=1280,height=720");
 });
-$("btn-preview").addEventListener("click", () => {
-  window.open(outputUrl, "vj-preview", "width=640,height=360");
-});
+
+// --- 埋め込みプレビュー ---
+// 出力ウィンドウと同じ「<video>2枚をopacityで重ねる」合成をコントローラ内で再現する。
+// 同一ウィンドウ内なので BroadcastChannel を介さず、デッキ動画へ直接追従させる。
+const previewVideos: Record<DeckId, HTMLVideoElement> = {
+  a: $("preview-a"),
+  b: $("preview-b"),
+};
+previewVideos.b.style.opacity = "0";
+
+function syncPreview(): void {
+  for (const deck of decks) {
+    const pv = previewVideos[deck.id];
+    if (!deck.url) continue;
+    // ズレたときだけ合わせ、毎フレームの代入で再生を乱さないようにする
+    if (Math.abs(pv.currentTime - deck.video.currentTime) > 0.1) {
+      pv.currentTime = deck.video.currentTime;
+    }
+    if (deck.playing && pv.paused) void pv.play();
+    if (!deck.playing && !pv.paused) pv.pause();
+  }
+}
 
 channel.onmessage = (event) => {
   const message = event.data as VjMessage;
@@ -483,6 +505,7 @@ function tick(): void {
       deck.seekBar.value = String(Math.round((video.currentTime / video.duration) * 1000));
     }
   }
+  syncPreview();
   requestAnimationFrame(tick);
 }
 tick();
