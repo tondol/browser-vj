@@ -436,6 +436,32 @@ $("btn-output").addEventListener("click", () => {
   window.open(outputUrl, "vj-output", "width=1280,height=720");
 });
 
+// --- ヘルプダイアログ ---
+const helpDialog = $<HTMLDialogElement>("help-dialog");
+$("btn-help").addEventListener("click", () => helpDialog.showModal());
+$("btn-help-close").addEventListener("click", () => helpDialog.close());
+// 背景（バックドロップ）クリックで閉じる。
+// <dialog> のバックドロップはダイアログ本体への click として届くため、
+// event.target だけではコンテンツ上のクリックと区別できない（テキスト選択を
+// 解除するクリック等で誤って閉じてしまう）。そこで mousedown と mouseup の
+// 両方の座標がダイアログの描画矩形の外にあるときだけ閉じる。
+function isOutsideDialog(event: MouseEvent): boolean {
+  const r = helpDialog.getBoundingClientRect();
+  return (
+    event.clientX < r.left ||
+    event.clientX > r.right ||
+    event.clientY < r.top ||
+    event.clientY > r.bottom
+  );
+}
+let downOutside = false;
+helpDialog.addEventListener("mousedown", (event) => {
+  downOutside = isOutsideDialog(event);
+});
+helpDialog.addEventListener("mouseup", (event) => {
+  if (downOutside && isOutsideDialog(event)) helpDialog.close();
+});
+
 // --- 埋め込みプレビュー ---
 // 出力ウィンドウと同じ「<video>2枚をopacityで重ねる」合成をコントローラ内で再現する。
 // 同一ウィンドウ内なので BroadcastChannel を介さず、デッキ動画へ直接追従させる。

@@ -27,6 +27,7 @@
       <h1>browser-vj</h1>
       <div class="header-buttons">
         <button id="btn-output">出力ウィンドウ</button>
+        <button id="btn-help" title="使い方">？</button>
       </div>
     </header>
 
@@ -97,20 +98,44 @@
       <ul id="library-list"></ul>
     </section>
 
-    <footer>
-      <details>
-        <summary>ホットキー</summary>
-        <table>
-          <tr><td>← / →</td><td>フェーダー移動（Shiftで微調整）</td></tr>
-          <tr><td>1 / 2</td><td>フェーダーをA / Bへ一気に切り替え</td></tr>
-          <tr><td>S</td><td>Deck A 再生/停止</td></tr>
-          <tr><td>L</td><td>Deck B 再生/停止</td></tr>
-          <tr><td>Q / W</td><td>Deck A 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
-          <tr><td>O / P</td><td>Deck B 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
-        </table>
-        <p>ホットキーは出力/プレビューウィンドウにフォーカスがあるときも有効。</p>
-      </details>
-    </footer>
+    <dialog id="help-dialog">
+      <div class="help-header">
+        <h2>使い方</h2>
+        <button id="btn-help-close" title="閉じる">×</button>
+      </div>
+
+      <h3>動画の読み込み</h3>
+      <ul>
+        <li>各デッキに動画ファイルを<strong>ドラッグ＆ドロップ</strong>、または「ファイルを開く」でロードする</li>
+        <li>ライブラリには<strong>フォルダごとドロップ</strong>でき、含まれる動画をまとめて登録できる</li>
+        <li>対応形式は <strong>mp4（H.264）</strong>。それ以外は読み込めない</li>
+      </ul>
+
+      <h3>出力</h3>
+      <ul>
+        <li>「出力ウィンドウ」を開き、プロジェクタ等の画面へ移動してダブルクリックで最大化する</li>
+        <li>フェーダーでA/Bをクロスフェード。合成結果はフェーダー上のプレビューで確認できる</li>
+      </ul>
+
+      <h3>ホットキー</h3>
+      <table>
+        <tr><td>← / →</td><td>フェーダー移動（Shiftで微調整）</td></tr>
+        <tr><td>1 / 2</td><td>フェーダーをA / Bへ一気に切り替え</td></tr>
+        <tr><td>S</td><td>Deck A 再生/停止</td></tr>
+        <tr><td>L</td><td>Deck B 再生/停止</td></tr>
+        <tr><td>Q / W</td><td>Deck A 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
+        <tr><td>O / P</td><td>Deck B 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
+      </table>
+      <p class="help-note">ホットキーは出力ウィンドウにフォーカスがあるときも有効。</p>
+
+      <div class="help-credit">
+        <p>
+          tondol w/ <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> ／
+          <a href="https://github.com/tondol/browser-vj" target="_blank" rel="noopener">GitHub</a> ／
+          MIT License
+        </p>
+      </div>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
