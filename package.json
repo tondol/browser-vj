@@ -13,7 +13,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "demo": "node scripts/demo.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "25.1.0",
