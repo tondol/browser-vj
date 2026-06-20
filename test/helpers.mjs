@@ -51,10 +51,18 @@ export async function launch() {
 }
 
 // ページの JS エラー・console.error を配列に集める。
+// スマホリモコンの WebSocket は中継サーバ（bridge/server.mjs）が無いと接続に
+// 失敗するが、テストでは中継サーバを起動しないため、この接続失敗は想定内として
+// 無視する（後起動や GitHub Pages では無効化される任意機能のため）。
+const IGNORED_ERROR_PATTERNS = [/ws:\/\/.*:8787/];
+
 export function collectErrors(page, label, sink) {
   page.on("pageerror", (e) => sink.push(`${label}: ${e.message}`));
   page.on("console", (m) => {
-    if (m.type() === "error") sink.push(`${label} console: ${m.text()}`);
+    if (m.type() !== "error") return;
+    const text = m.text();
+    if (IGNORED_ERROR_PATTERNS.some((re) => re.test(text))) return;
+    sink.push(`${label} console: ${text}`);
   });
 }
 

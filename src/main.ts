@@ -449,18 +449,23 @@ $("btn-output").addEventListener("click", () => {
 
 // --- ヘルプダイアログ ---
 const helpDialog = $<HTMLDialogElement>("help-dialog");
+// リモコン無効ビルド（GitHub Pages 等）ではヘルプのリモコン欄ごと隠す。
+if (!__REMOTE_ENABLED__) $("help-remote").style.display = "none";
+
 $("btn-help").addEventListener("click", () => {
   helpDialog.showModal();
-  void loadRemoteQr();
+  if (__REMOTE_ENABLED__) void loadRemoteQr();
 });
 
-// 中継サーバ（bridge/server.mjs）の /info からリモコン URL と QR を取得して表示する。
+// 中継サーバ（bridge/server.mjs）の待受ポート。WS 接続も QR/info 取得も同じ。
+const REMOTE_PORT = 8787;
+
+// /info からリモコン URL と QR を取得して表示する。
 // サーバ未起動なら案内文のまま（毎回開くたびに取り直すので、後から起動しても反映される）。
-const REMOTE_QR_PORT = 8787;
 async function loadRemoteQr(): Promise<void> {
   const container = $("help-qr");
   try {
-    const res = await fetch(`http://${location.hostname}:${REMOTE_QR_PORT}/info`);
+    const res = await fetch(`http://${location.hostname}:${REMOTE_PORT}/info`);
     if (!res.ok) throw new Error("info failed");
     const info = (await res.json()) as { url: string; qr: string };
     const img = document.createElement("img");
@@ -646,9 +651,8 @@ setFader(0);
 
 // --- スマホ用リモコン（WebSocket ブリッジ） ---
 // bridge/server.mjs に繋ぎ、スマホから届く {type:"key"} を handleHotkey に流す。
-// 中継サーバは操作UIと同じホストの 8787 番で動いている前提（同一LANの使い捨て構成）。
+// 中継サーバは操作UIと同じホストの REMOTE_PORT で動いている前提（同一LANの使い捨て構成）。
 // サーバが起動していなければ繋がらないだけで、ローカル操作には影響しない。
-const REMOTE_PORT = 8787;
 
 function sendRemote(message: VjMessage): void {
   if (remoteSocket?.readyState === WebSocket.OPEN) {
@@ -720,4 +724,5 @@ function connectRemote(): void {
   };
   socket.onerror = () => socket.close();
 }
-connectRemote();
+// リモコン無効ビルド（中継サーバのない静的配信）では WS 接続を試みない。
+if (__REMOTE_ENABLED__) connectRemote();
