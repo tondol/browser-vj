@@ -705,6 +705,10 @@ function connectRemote(): void {
       case "key":
         handleHotkey(message.code, message.shiftKey);
         break;
+      case "fader":
+        // スマホのスライダーからの絶対値指定。post で他クライアントにも反映される。
+        setFader(message.value);
+        break;
       case "library-request":
         sendLibraryList();
         sendStatus(); // 接続直後にも現在の出力状態を送る

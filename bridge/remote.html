@@ -134,6 +134,67 @@
       button.output {
         box-shadow: 0 0 0 1.5px #ffffff4d inset;
       }
+      /* クロスフェーダー。指で掴みやすいよう太め・大きめのつまみにする。 */
+      .fader-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+      }
+      /* スライダー両脇の一発全開ボタン。タップで A=全開 / B=全開 にする。 */
+      /* A:スライダー:B = 1:2:1。ボタンは下の行の感覚に近づけつつスライダー幅も確保する。 */
+      .fader-end {
+        flex: 1;
+        font-size: 16px;
+        font-weight: bold;
+        padding: 11px 0;
+        text-align: center;
+      }
+      .fader-end.a {
+        color: #cfe3f5;
+        border-bottom: 3px solid #4a90d9;
+      }
+      .fader-end.b {
+        color: #f5d8cc;
+        border-bottom: 3px solid #d96f4a;
+      }
+      #fader {
+        flex: 2;
+        height: 36px;
+        margin: 0;
+        background: transparent;
+        -webkit-appearance: none;
+        appearance: none;
+        touch-action: none; /* スライダー操作中はページがスクロールしないように */
+      }
+      #fader::-webkit-slider-runnable-track {
+        height: 10px;
+        border-radius: 5px;
+        background: linear-gradient(to right, #2c5a8c, #8c452c);
+      }
+      #fader::-moz-range-track {
+        height: 10px;
+        border-radius: 5px;
+        background: linear-gradient(to right, #2c5a8c, #8c452c);
+      }
+      #fader::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 28px;
+        height: 28px;
+        margin-top: -9px;
+        border-radius: 50%;
+        background: #eee;
+        box-shadow: 0 0 0 2px #0008;
+      }
+      #fader::-moz-range-thumb {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 50%;
+        background: #eee;
+        box-shadow: 0 0 0 2px #0008;
+      }
       .shift-toggle {
         display: flex;
         align-items: center;
@@ -214,11 +275,10 @@
     </div>
 
     <div class="label">フェーダー（A ⇄ B）</div>
-    <div class="row">
-      <button data-key="Digit1">◀ A全開</button>
-      <button data-key="ArrowLeft">◀ Aへ</button>
-      <button data-key="ArrowRight">Bへ ▶</button>
-      <button data-key="Digit2">B全開 ▶</button>
+    <div class="fader-row">
+      <button class="fader-end a" id="fader-a">A</button>
+      <input type="range" id="fader" min="0" max="1000" value="0" />
+      <button class="fader-end b" id="fader-b">B</button>
     </div>
 
     <div class="label">シーク微調整（nudge）</div>
@@ -289,6 +349,31 @@
         send({ type: "key", code, shiftKey });
       }
 
+      // クロスフェーダー。操作中（dragging）は status 受信で位置を上書きしない。
+      const faderEl = document.getElementById("fader");
+      let faderDragging = false;
+      faderEl.addEventListener("input", () => {
+        send({ type: "fader", value: Number(faderEl.value) / 1000 });
+      });
+      faderEl.addEventListener("pointerdown", () => (faderDragging = true));
+      const endFaderDrag = () => (faderDragging = false);
+      faderEl.addEventListener("pointerup", endFaderDrag);
+      faderEl.addEventListener("pointercancel", endFaderDrag);
+
+      // 両脇のボタンで一発全開。スライダーも即座に端へ寄せる。
+      function setFaderEnd(value) {
+        faderEl.value = String(value * 1000);
+        send({ type: "fader", value });
+      }
+      document.getElementById("fader-a").addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        setFaderEnd(0);
+      });
+      document.getElementById("fader-b").addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        setFaderEnd(1);
+      });
+
       const nowOutputEl = document.getElementById("now-output");
       const nowBadgeEl = document.getElementById("now-badge");
       const nowNameEl = document.getElementById("now-name");
@@ -324,6 +409,8 @@
           btn.style.setProperty("--progress", String(status.decks[id].progress));
           btn.classList.toggle("output", id === out);
         }
+        // PC側やキー操作でフェーダーが動いたときもスライダーを追従させる（操作中は除く）。
+        if (!faderDragging) faderEl.value = String(Math.round(status.fader * 1000));
         outputDeck = out;
         updateLoadButtonWarnings();
       }
