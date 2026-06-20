@@ -1,4 +1,4 @@
-import { CHANNEL_NAME, type DeckId, type VjMessage } from "./protocol";
+import { CHANNEL_NAME, type DeckId, type DeckStatus, type VjMessage } from "./protocol";
 import { Library, type LibraryEntry } from "./library";
 
 const NUDGE_FINE_MS = 100;
@@ -46,6 +46,7 @@ function createDeck(id: DeckId): Deck {
       deck.playing = false;
       deck.playButton.textContent = "再生";
       post({ type: "pause", deck: deck.id });
+      sendStatus();
     }
   });
   deck.playButton.addEventListener("click", () => togglePlay(deck));
@@ -78,6 +79,7 @@ function startPlayback(deck: Deck): void {
   deck.playButton.textContent = "停止";
   void deck.video.play();
   post({ type: "play", deck: deck.id });
+  sendStatus();
 }
 
 function stopPlayback(deck: Deck): void {
@@ -85,6 +87,7 @@ function stopPlayback(deck: Deck): void {
   deck.playButton.textContent = "再生";
   deck.video.pause();
   post({ type: "pause", deck: deck.id });
+  sendStatus();
 }
 
 function loadFile(deck: Deck, file: File): void {
@@ -142,6 +145,7 @@ function setFader(value: number, updateInput = true): void {
   faderLabel.textContent = `A ${100 - b}% / B ${b}%`;
   previewVideos.b.style.opacity = String(faderPosition);
   post({ type: "fader", value: faderPosition });
+  sendStatus();
 }
 
 faderInput.addEventListener("input", () =>
@@ -193,6 +197,10 @@ async function loadFromPicker(deck: Deck): Promise<void> {
 
 const library = new Library();
 const libraryList = $<HTMLUListElement>("library-list");
+
+// スマホリモコン用 WebSocket。renderLibrary から sendLibraryList 経由で参照されるため、
+// 非同期な DnD ロード（await を挟む）でも TDZ を踏まないよう、ここで先に宣言しておく。
+let remoteSocket: WebSocket | null = null;
 
 // entry.id -> サムネ dataURL。再描画での再デコードを避けるためのキャッシュ。
 const thumbnailCache = new Map<number, string>();
@@ -306,6 +314,7 @@ function entryTile(entry: LibraryEntry): HTMLLIElement {
       if (!dataUrl) return;
       thumbnailCache.set(entry.id, dataUrl);
       thumb.style.backgroundImage = `url(${dataUrl})`;
+      sendLibraryList(); // サムネ生成後にスマホ一覧へも反映する
     });
   }
 
@@ -318,6 +327,8 @@ function loadFromLibrary(entry: LibraryEntry, deck: Deck): void {
 
 function renderLibrary(): void {
   libraryList.replaceChildren(...library.list().map(entryTile));
+  // スマホリモコンが繋がっていれば一覧を同期する（追加・削除・クリアに追従）。
+  sendLibraryList();
 }
 
 interface LibraryItem {
@@ -438,7 +449,37 @@ $("btn-output").addEventListener("click", () => {
 
 // --- ヘルプダイアログ ---
 const helpDialog = $<HTMLDialogElement>("help-dialog");
-$("btn-help").addEventListener("click", () => helpDialog.showModal());
+$("btn-help").addEventListener("click", () => {
+  helpDialog.showModal();
+  void loadRemoteQr();
+});
+
+// 中継サーバ（bridge/server.mjs）の /info からリモコン URL と QR を取得して表示する。
+// サーバ未起動なら案内文のまま（毎回開くたびに取り直すので、後から起動しても反映される）。
+const REMOTE_QR_PORT = 8787;
+async function loadRemoteQr(): Promise<void> {
+  const container = $("help-qr");
+  try {
+    const res = await fetch(`http://${location.hostname}:${REMOTE_QR_PORT}/info`);
+    if (!res.ok) throw new Error("info failed");
+    const info = (await res.json()) as { url: string; qr: string };
+    const img = document.createElement("img");
+    img.src = info.qr;
+    img.alt = "リモコンURLのQRコード";
+    img.width = 200;
+    img.height = 200;
+    const link = document.createElement("p");
+    link.className = "help-note";
+    link.textContent = info.url;
+    container.replaceChildren(img, link);
+  } catch {
+    // サーバ未起動・到達不可。案内文を出す（再度開けば再試行される）。
+    const note = document.createElement("p");
+    note.className = "help-note";
+    note.textContent = "QR を準備中…（中継サーバ node bridge/server.mjs を起動してください）";
+    container.replaceChildren(note);
+  }
+}
 $("btn-help-close").addEventListener("click", () => helpDialog.close());
 // 背景（バックドロップ）クリックで閉じる。
 // <dialog> のバックドロップはダイアログ本体への click として届くため、
@@ -512,6 +553,8 @@ setInterval(() => {
       sentAt: Date.now(),
     });
   }
+  // 再生中はスマホ側の進捗バーを動かすため、状態変化が無くても定期的に送る。
+  if (remoteSocket?.readyState === WebSocket.OPEN) sendStatus();
 }, SYNC_INTERVAL_MS);
 
 // --- 表示更新 ---
@@ -600,3 +643,81 @@ document.addEventListener("keydown", (event) => {
 });
 
 setFader(0);
+
+// --- スマホ用リモコン（WebSocket ブリッジ） ---
+// bridge/server.mjs に繋ぎ、スマホから届く {type:"key"} を handleHotkey に流す。
+// 中継サーバは操作UIと同じホストの 8787 番で動いている前提（同一LANの使い捨て構成）。
+// サーバが起動していなければ繋がらないだけで、ローカル操作には影響しない。
+const REMOTE_PORT = 8787;
+
+function sendRemote(message: VjMessage): void {
+  if (remoteSocket?.readyState === WebSocket.OPEN) {
+    remoteSocket.send(JSON.stringify(message));
+  }
+}
+
+// スマホ一覧用に id/name/thumb だけを抜き出して送る（thumb は生成済みのみ）。
+function sendLibraryList(): void {
+  const entries = library.list().map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    thumb: thumbnailCache.get(entry.id) ?? null,
+  }));
+  sendRemote({ type: "library-list", entries });
+}
+
+// スマホ側で出力中デッキを表示するための現在状態を送る。
+function deckStatus(deck: Deck): DeckStatus {
+  const duration = deck.video.duration || 0;
+  const progress = duration ? deck.video.currentTime / duration : 0;
+  return { name: deck.fileName, playing: deck.playing, progress };
+}
+
+function sendStatus(): void {
+  sendRemote({
+    type: "status",
+    fader: faderPosition,
+    decks: { a: deckStatus(deckA), b: deckStatus(deckB) },
+  });
+}
+
+function connectRemote(): void {
+  const url = `ws://${location.hostname}:${REMOTE_PORT}`;
+  let socket: WebSocket;
+  try {
+    socket = new WebSocket(url);
+  } catch {
+    return; // 生成失敗時は黙って諦める
+  }
+  remoteSocket = socket;
+  socket.onmessage = (event) => {
+    let message: VjMessage;
+    try {
+      message = JSON.parse(String(event.data)) as VjMessage;
+    } catch {
+      return;
+    }
+    switch (message.type) {
+      case "key":
+        handleHotkey(message.code, message.shiftKey);
+        break;
+      case "library-request":
+        sendLibraryList();
+        sendStatus(); // 接続直後にも現在の出力状態を送る
+        break;
+      case "library-load": {
+        const entry = library.list().find((e) => e.id === message.id);
+        const deck = message.deck === "a" ? deckA : deckB;
+        if (entry) loadFromLibrary(entry, deck);
+        break;
+      }
+    }
+  };
+  // 切断されたら一定間隔で繋ぎ直す（サーバ後起動・再起動に追従）。
+  socket.onclose = () => {
+    if (remoteSocket === socket) remoteSocket = null;
+    setTimeout(connectRemote, 2000);
+  };
+  socket.onerror = () => socket.close();
+}
+connectRemote();

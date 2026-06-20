@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>browser-vj remote</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #111;
+        color: #eee;
+        font-family: system-ui, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      .status {
+        font-size: 12px;
+        text-align: center;
+        padding: 3px;
+        border-radius: 6px;
+      }
+      .status.on {
+        background: #143;
+        color: #8f8;
+      }
+      .status.off {
+        background: #411;
+        color: #f88;
+      }
+      /* いま出力されているデッキを大きく示すバー。fader 位置で A/B を判定する。 */
+      .now-output {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: #1c1c1c;
+        border-left: 8px solid #555;
+      }
+      .now-output.a {
+        border-left-color: #4a90d9;
+        background: #16243a;
+      }
+      .now-output.b {
+        border-left-color: #d96f4a;
+        background: #3a2016;
+      }
+      .now-badge {
+        font-size: 28px;
+        font-weight: bold;
+        line-height: 1;
+        width: 40px;
+        text-align: center;
+      }
+      .now-text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      /* 日本語/英数でグリフの高さが変わっても行ボックスが揺れないよう固定する。 */
+      .now-title {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #aaa;
+      }
+      .now-name {
+        font-size: 14px;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      .label {
+        font-size: 11px;
+        color: #999;
+        margin: 2px 2px 0;
+      }
+      button {
+        font-size: 15px;
+        font-weight: bold;
+        padding: 11px 6px;
+        border: none;
+        border-radius: 8px;
+        background: #2a2a2a;
+        color: #eee;
+        touch-action: manipulation;
+      }
+      button:active {
+        background: #4a4a4a;
+      }
+      button.a {
+        border-bottom: 3px solid #4a90d9;
+      }
+      button.b {
+        border-bottom: 3px solid #d96f4a;
+      }
+      /* 再生ボタンは背景グラデーションで再生位置を表す（JS が --progress を更新）。
+         出力中の側は枠を光らせて区別する。 */
+      button.progress {
+        background: linear-gradient(
+          to right,
+          var(--bar) calc(var(--progress, 0) * 100%),
+          #2a2a2a calc(var(--progress, 0) * 100%)
+        );
+      }
+      button.progress.a {
+        --bar: #2c5a8c;
+      }
+      button.progress.b {
+        --bar: #8c452c;
+      }
+      button.output {
+        box-shadow: 0 0 0 1.5px #ffffff4d inset;
+      }
+      .shift-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 13px;
+        padding: 8px 6px;
+      }
+      .shift-toggle.active {
+        background: #553;
+        color: #ffd;
+      }
+      .library {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .lib-entry {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #1c1c1c;
+        border-radius: 8px;
+        padding: 6px;
+      }
+      .lib-thumb {
+        width: 64px;
+        height: 36px;
+        flex: none;
+        border-radius: 4px;
+        background: #000 center/cover no-repeat;
+      }
+      .lib-name {
+        flex: 1;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .lib-entry button {
+        flex: none;
+        font-size: 15px;
+        padding: 10px 12px;
+        border-radius: 8px;
+      }
+      /* 画面に出力中のデッキへのロードボタン。差し替え事故にそれとなく気づけるよう、
+         文字をグレーアウトして「触る前に一拍」を促す（デッキ色とは干渉させない）。 */
+      .lib-entry button.danger {
+        color: #777;
+      }
+      .lib-empty {
+        color: #888;
+        font-size: 13px;
+        text-align: center;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="status off" id="status">接続中…</div>
+
+    <div class="now-output" id="now-output">
+      <div class="now-badge" id="now-badge">–</div>
+      <div class="now-text">
+        <div class="now-title" id="now-title">出力中のデッキ</div>
+        <div class="now-name" id="now-name">（未ロード）</div>
+      </div>
+    </div>
+
+    <div class="label">再生 / 停止</div>
+    <div class="row">
+      <button class="a" id="play-a" data-key="KeyS">A 再生/停止</button>
+      <button class="b" id="play-b" data-key="KeyL">B 再生/停止</button>
+    </div>
+
+    <div class="label">フェーダー（A ⇄ B）</div>
+    <div class="row">
+      <button data-key="Digit1">◀ A全開</button>
+      <button data-key="ArrowLeft">◀ Aへ</button>
+      <button data-key="ArrowRight">Bへ ▶</button>
+      <button data-key="Digit2">B全開 ▶</button>
+    </div>
+
+    <div class="label">シーク微調整（nudge）</div>
+    <div class="row">
+      <button class="a" data-key="KeyQ">A ◀</button>
+      <button class="a" data-key="KeyW">A ▶</button>
+      <button class="b" data-key="KeyO">B ◀</button>
+      <button class="b" data-key="KeyP">B ▶</button>
+    </div>
+
+    <button class="shift-toggle" id="shift">Shift（粗く動かす）: OFF</button>
+
+    <div class="label">ライブラリ（タップでデッキへロード）</div>
+    <div class="library" id="library">
+      <div class="lib-empty">PCでライブラリに動画を追加してね</div>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const shiftBtn = document.getElementById("shift");
+      let shiftKey = false;
+      let socket = null;
+
+      shiftBtn.addEventListener("click", () => {
+        shiftKey = !shiftKey;
+        shiftBtn.textContent = `Shift（粗く動かす）: ${shiftKey ? "ON" : "OFF"}`;
+        shiftBtn.classList.toggle("active", shiftKey);
+      });
+
+      function setStatus(ok) {
+        statusEl.textContent = ok ? "接続中 ✓" : "未接続（再接続中…）";
+        statusEl.className = `status ${ok ? "on" : "off"}`;
+      }
+
+      const libraryEl = document.getElementById("library");
+
+      function connect() {
+        // remote.html は中継サーバ自身が配信しているので、同じホスト・同じポートに繋ぐ。
+        socket = new WebSocket(`ws://${location.host}`);
+        socket.onopen = () => {
+          setStatus(true);
+          send({ type: "library-request" }); // 接続時に現在のライブラリを要求
+        };
+        socket.onmessage = (event) => {
+          let message;
+          try {
+            message = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+          if (message.type === "library-list") renderLibrary(message.entries);
+          else if (message.type === "status") renderNowOutput(message);
+        };
+        socket.onclose = () => {
+          setStatus(false);
+          setTimeout(connect, 1500);
+        };
+        socket.onerror = () => socket.close();
+      }
+      connect();
+
+      function send(message) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify(message));
+      }
+
+      function sendKey(code) {
+        send({ type: "key", code, shiftKey });
+      }
+
+      const nowOutputEl = document.getElementById("now-output");
+      const nowBadgeEl = document.getElementById("now-badge");
+      const nowNameEl = document.getElementById("now-name");
+      const nowTitleEl = document.getElementById("now-title");
+      const playButtons = { a: document.getElementById("play-a"), b: document.getElementById("play-b") };
+
+      // いま画面に出力されているデッキ（"a" | "b" | null）。ライブラリのロードボタンの
+      // 警告表示にも使うため、ライブラリ再描画と status 更新の両方から参照する。
+      let outputDeck = null;
+
+      // 出力中デッキへのロードボタンに警告色を付け、差し替え事故に気づけるようにする。
+      function updateLoadButtonWarnings() {
+        for (const btn of libraryEl.querySelectorAll("button[data-deck]")) {
+          btn.classList.toggle("danger", btn.dataset.deck === outputDeck);
+        }
+      }
+
+      // fader: 0=A / 1=B。出力に主に見えているデッキを判定して大きく表示する。
+      function renderNowOutput(status) {
+        const out = status.fader < 0.5 ? "a" : "b";
+        const deck = status.decks[out];
+        nowOutputEl.className = `now-output ${out}`;
+        nowBadgeEl.textContent = out.toUpperCase();
+        const pct = Math.round((out === "a" ? 1 - status.fader : status.fader) * 100);
+        nowTitleEl.textContent = deck.playing
+          ? `出力中: Deck ${out.toUpperCase()}（${pct}%）`
+          : `Deck ${out.toUpperCase()}（${pct}%・停止中）`;
+        nowNameEl.textContent = deck.name || "（未ロード）";
+        // 再生ボタンを再生位置のバーにし、出力中（fader で選ばれている）側は枠を光らせる
+        for (const id of ["a", "b"]) {
+          const btn = playButtons[id];
+          btn.classList.add("progress");
+          btn.style.setProperty("--progress", String(status.decks[id].progress));
+          btn.classList.toggle("output", id === out);
+        }
+        outputDeck = out;
+        updateLoadButtonWarnings();
+      }
+
+      function renderLibrary(entries) {
+        libraryEl.replaceChildren();
+        if (!entries || entries.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "lib-empty";
+          empty.textContent = "PCでライブラリに動画を追加してね";
+          libraryEl.append(empty);
+          return;
+        }
+        for (const entry of entries) {
+          const row = document.createElement("div");
+          row.className = "lib-entry";
+
+          const thumb = document.createElement("div");
+          thumb.className = "lib-thumb";
+          if (entry.thumb) thumb.style.backgroundImage = `url(${entry.thumb})`;
+
+          const name = document.createElement("div");
+          name.className = "lib-name";
+          name.textContent = entry.name;
+
+          row.append(thumb, name);
+          for (const deck of ["a", "b"]) {
+            const btn = document.createElement("button");
+            btn.className = deck;
+            btn.dataset.deck = deck;
+            btn.textContent = `→ ${deck.toUpperCase()}`;
+            btn.addEventListener("pointerdown", (event) => {
+              event.preventDefault();
+              send({ type: "library-load", id: entry.id, deck });
+            });
+            row.append(btn);
+          }
+          libraryEl.append(row);
+        }
+        updateLoadButtonWarnings(); // 再描画後も最新の出力状態を反映する
+      }
+
+      // ボタンは pointerdown で反応させ、タップの取りこぼしを減らす。
+      for (const btn of document.querySelectorAll("button[data-key]")) {
+        btn.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          sendKey(btn.dataset.key);
+        });
+      }
+    </script>
+  </body>
+</html>

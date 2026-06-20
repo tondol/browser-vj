@@ -308,6 +308,24 @@ button:disabled {
   margin: 10px 0 0;
 }
 
+.help-qr {
+  text-align: center;
+  margin-top: 14px;
+}
+
+.help-qr img {
+  /* QR は白地が必要なので余白付きで白背景を敷く */
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.help-qr .help-note {
+  /* URL 文字列は中央寄せでQR直下に置く */
+  text-align: center;
+  word-break: break-all;
+}
+
 #btn-help {
   /* 縦 padding は他のヘッダボタンと揃え、横だけ詰めて正方形に近づける */
   width: 28px;
