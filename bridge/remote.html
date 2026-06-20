@@ -26,11 +26,16 @@
         padding: 8px;
         box-sizing: border-box;
       }
+      /* 接続ステータスは右上に小さく重ねる */
       .status {
-        font-size: 12px;
-        text-align: center;
-        padding: 3px;
-        border-radius: 6px;
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 10px;
+        z-index: 10;
+        pointer-events: none;
       }
       .status.on {
         background: #143;
@@ -40,15 +45,15 @@
         background: #411;
         color: #f88;
       }
-      /* いま出力されているデッキを大きく示すバー。fader 位置で A/B を判定する。 */
+      /* いま出力されているデッキを示すバー。fader 位置で A/B を判定する。 */
       .now-output {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 8px 12px;
-        border-radius: 10px;
+        gap: 8px;
+        padding: 5px 10px;
+        border-radius: 8px;
         background: #1c1c1c;
-        border-left: 8px solid #555;
+        border-left: 6px solid #555;
       }
       .now-output.a {
         border-left-color: #4a90d9;
@@ -59,10 +64,10 @@
         background: #3a2016;
       }
       .now-badge {
-        font-size: 28px;
+        font-size: 20px;
         font-weight: bold;
         line-height: 1;
-        width: 40px;
+        width: 28px;
         text-align: center;
       }
       .now-text {
@@ -70,17 +75,16 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
       }
-      /* 日本語/英数でグリフの高さが変わっても行ボックスが揺れないよう固定する。 */
       .now-title {
-        font-size: 13px;
-        line-height: 1.4;
+        font-size: 11px;
+        line-height: 1.3;
         color: #aaa;
       }
       .now-name {
-        font-size: 14px;
-        line-height: 1.4;
+        font-size: 12px;
+        line-height: 1.3;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -93,9 +97,7 @@
         flex: 1;
       }
       .label {
-        font-size: 11px;
-        color: #999;
-        margin: 2px 2px 0;
+        display: none;
       }
       button {
         font-size: 15px;
@@ -133,6 +135,13 @@
       }
       button.output {
         box-shadow: 0 0 0 1.5px #ffffff4d inset;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+      button.playing {
+        animation: pulse 1.2s ease-in-out infinite;
       }
       /* クロスフェーダー。指で掴みやすいよう太め・大きめのつまみにする。 */
       .fader-row {
@@ -270,8 +279,8 @@
 
     <div class="label">再生 / 停止</div>
     <div class="row">
-      <button class="a" id="play-a" data-key="KeyS">A 再生/停止</button>
-      <button class="b" id="play-b" data-key="KeyL">B 再生/停止</button>
+      <button class="a" id="play-a" data-key="KeyS">▶️ A</button>
+      <button class="b" id="play-b" data-key="KeyL">▶️ B</button>
     </div>
 
     <div class="label">フェーダー（A ⇄ B）</div>
@@ -405,9 +414,12 @@
         // 再生ボタンを再生位置のバーにし、出力中（fader で選ばれている）側は枠を光らせる
         for (const id of ["a", "b"]) {
           const btn = playButtons[id];
+          const playing = status.decks[id].playing;
           btn.classList.add("progress");
           btn.style.setProperty("--progress", String(status.decks[id].progress));
           btn.classList.toggle("output", id === out);
+          btn.classList.toggle("playing", playing);
+          btn.textContent = `${playing ? "⏸️" : "▶️"} ${id.toUpperCase()}`;
         }
         // PC側やキー操作でフェーダーが動いたときもスライダーを追従させる（操作中は除く）。
         if (!faderDragging) faderEl.value = String(Math.round(status.fader * 1000));
