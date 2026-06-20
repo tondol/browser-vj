@@ -34,7 +34,10 @@
     <main>
       <section class="deck" id="deck-a">
         <h2>Deck A</h2>
-        <video id="video-a" muted playsinline loop></video>
+        <!-- 全画面で出力窓を前面にするとこの操作UI窓が裏に回り、Chrome が音声なし
+             動画を省電力停止する（sync が止まり出力が0.5秒周期で巻き戻る）。音声を
+             載せて video-only を回避し裏でも停止させない。スピーカーは OS 側でミュート。 -->
+        <video id="video-a" playsinline loop></video>
         <div class="deck-info">
           <span class="deck-name" id="name-a">（未ロード）</span>
           <span class="deck-time" id="time-a">-:--.--- / -:--.---</span>
@@ -66,7 +69,7 @@
 
       <section class="deck" id="deck-b">
         <h2>Deck B</h2>
-        <video id="video-b" muted playsinline loop></video>
+        <video id="video-b" playsinline loop></video>
         <div class="deck-info">
           <span class="deck-name" id="name-b">（未ロード）</span>
           <span class="deck-time" id="time-b">-:--.--- / -:--.---</span>
@@ -127,6 +130,17 @@
         <tr><td>O / P</td><td>Deck B 位置 -100ms / +100ms（Shiftで±1s）</td></tr>
       </table>
       <p class="help-note">ホットキーは出力ウィンドウにフォーカスがあるときも有効。</p>
+
+      <section id="help-remote">
+        <h3>スマホでリモコン</h3>
+        <ul>
+          <li>PC で <code>node bridge/server.mjs</code> を起動し、PC とスマホを<strong>同じ Wi-Fi</strong> に繋ぐ</li>
+          <li>下の QR をスマホで読み取ると、リモコン画面が開く</li>
+        </ul>
+        <div class="help-qr" id="help-qr">
+          <p class="help-note" id="help-qr-status">QR を準備中…（中継サーバを起動してください）</p>
+        </div>
+      </section>
 
       <div class="help-credit">
         <p>
